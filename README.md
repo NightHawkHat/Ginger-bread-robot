@@ -4,4 +4,3 @@ This is the code for the gingerbread robot my daughter and I build for Christmas
 
 Pictures here: http://imgur.com/a/88LTd 
 
-Here's a change.
