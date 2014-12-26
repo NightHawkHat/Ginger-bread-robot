@@ -1,0 +1,306 @@
+/* 
+This is a test sketch for the Adafruit assembled Motor Shield for Arduino v2
+
+It also tests the stacked Adafruit WAVE shield with the Dalek scream Exterminate! installed on the SD card.
+
+
+For use with the Adafruit Motor Shield v2 
+---->	http://www.adafruit.com/products/1438
+*/
+
+//call libraries
+#include <Wire.h>
+#include <Adafruit_MotorShield.h>
+#include "utility/Adafruit_PWMServoDriver.h"
+#include <WaveHC.h>
+#include <WaveUtil.h>
+
+//Motor objects
+// Create the motor shield object with the default I2C address
+Adafruit_MotorShield AFMS = Adafruit_MotorShield(); 
+// Or, create it with a different I2C address (say for stacking)
+// Adafruit_MotorShield AFMS = Adafruit_MotorShield(0x61); 
+
+// Select which 'port' M1, M2, M3 or M4. In this case, M1
+Adafruit_DCMotor *myLeftMotor = AFMS.getMotor(1);
+// You can also make another motor on port M2
+Adafruit_DCMotor *myRightMotor = AFMS.getMotor(2);
+
+//Sound objects
+SdReader card;    // This object holds the information for the card
+FatVolume vol;    // This holds the information for the partition on the card
+FatReader root;   // This holds the information for the volumes root directory
+WaveHC wave;      // This is the only wave (audio) object, since we will only play one at a time
+
+uint8_t dirLevel; // indent level for file/dir names    (for prettyprinting)
+dir_t dirBuf;     // buffer for directory reads
+
+  //variables needed to store values
+  int blinkDelay = 100;
+  long anVolt, inches, cm;
+  int sum=0;//Create sum variable so it can be averaged
+  int avgrange=30;//Quantity of values to average (sample size)
+  int PIROn=0;//Create value to store PIR reading
+
+/*
+ * Define macro to put error messages in flash memory
+ */
+#define error(msg) error_P(PSTR(msg))
+
+// Function definitions (we define them here, but the code is below)
+void play(FatReader &dir);
+
+void setup() {
+  Serial.begin(9600);           // set up Serial library at 9600 bps
+  
+
+  
+  ///////////Sensor, LED Setup /////////////////////////////////////
+
+  //initialize sensors
+  pinMode(6, INPUT); //for PIR sensor
+  pinMode(7, OUTPUT); //for Right LED indicator
+  pinMode(8, OUTPUT); //for Middle LED indicator
+  pinMode(9, OUTPUT); //for Left LED indicator
+  pinMode(11, OUTPUT);//for PIR LED indicator
+  //turn off all LED's to start
+  digitalWrite(7, LOW);
+  digitalWrite(8, LOW);
+  digitalWrite(9, LOW);
+  digitalWrite(11, LOW);
+  
+  ////////// Motor Setup////////////////////////////////////////////
+  Serial.println("Adafruit Motorshield v2 - DC Motor test!");
+
+  AFMS.begin();  // create with the default frequency 1.6KHz
+  //AFMS.begin(1000);  // OR with a different frequency, say 1KHz
+  
+  // Set the speed to start, from 0 (off) to 255 (max speed)
+  myLeftMotor->setSpeed(50);
+  myLeftMotor->run(FORWARD);
+  // turn on motor
+  myLeftMotor->run(RELEASE);
+  
+  myRightMotor->setSpeed(50);
+  myRightMotor->run(FORWARD);
+  // turn on motor
+  myRightMotor->run(RELEASE);
+  
+  //////////////////////////// Sound Setup////////////////////////////////////////////////////////
+  putstring_nl("\nWave test!");  // say we woke up!
+  
+  putstring("Free RAM: ");       // This can help with debugging, running out of RAM is bad
+  Serial.println(FreeRam());
+
+  //  if (!card.init(true)) { //play with 4 MHz spi if 8MHz isn't working for you
+  if (!card.init()) {         //play with 8 MHz spi (default faster!)  
+    error("Card init. failed!");  // Something went wrong, lets print out why
+  }
+  
+  // enable optimize read - some cards may timeout. Disable if you're having problems
+  card.partialBlockRead(true);
+  
+  // Now we will look for a FAT partition!
+  uint8_t part;
+  for (part = 0; part < 5; part++) {   // we have up to 5 slots to look in
+    if (vol.init(card, part)) 
+      break;                           // we found one, lets bail
+  }
+  if (part == 5) {                     // if we ended up not finding one  :(
+    error("No valid FAT partition!");  // Something went wrong, lets print out why
+  }
+  
+  // Lets tell the user about what we found
+  putstring("Using partition ");
+  Serial.print(part, DEC);
+  putstring(", type is FAT");
+  Serial.println(vol.fatType(), DEC);     // FAT16 or FAT32?
+  
+  // Try to open the root directory
+  if (!root.openRoot(vol)) {
+    error("Can't open root dir!");      // Something went wrong,
+  }
+  
+  // Whew! We got past the tough parts.
+  putstring_nl("Files found (* = fragmented):");
+
+  // Print out all of the files in all the directories.
+  root.ls(LS_R | LS_FLAG_FRAGMENTED);
+  /////////////////////////////////////// End of sound setup. ///////////////////////////////////////////
+  
+}
+
+///// Function to read distance sensors ////(Currently not in use!!) //////////
+long DistanceInInches (int anPin) {
+  //This function reads distance sensors at the Analog pins and returns the distance in inches.
+  //Setup function variables
+  long anVolt;//analog voltage variable
+  long result;
+  int sum=0;//Create sum variable so it can be averaged
+  int avgrange=60;//Quantity of values to average (sample size)
+  
+  //MaxSonar Analog reads are known to be very sensitive. See the Arduino forum for more information.
+  //A simple fix is to average out a sample of n readings to get a more consistant reading.\\ 
+  //This loop gets avrange number of reads and averages them
+  for(int i = 0; i < avgrange ; i++)
+  {
+    //Used to read in the analog voltage output that is being sent by the MaxSonar device.
+    //Scale factor is (Vcc/512) per inch. A 5V supply yields ~9.8mV/in
+    //Arduino analog pin goes from 0 to 1024, so the value has to be divided by 2 to get the actual inches
+    anVolt = analogRead(anPin)/2;
+    sum += anVolt;
+    delay(10);
+  }  
+  result = sum/avgrange;
+  return result;
+}
+
+////////////////Functions to turn right and left //////////////////////
+
+//Spins Right. 
+void SpinRight() {
+     myLeftMotor->run(FORWARD);
+     myRightMotor->run(FORWARD);
+     delay(40);
+     Serial.println("right");
+}
+
+//Spins Left. 
+void SpinLeft() {
+     myLeftMotor->run(BACKWARD);
+     myRightMotor->run(BACKWARD);
+     delay(40);
+     Serial.println("left");
+}
+
+void Stop() {
+  myLeftMotor->run(RELEASE);
+  myRightMotor->run(RELEASE);
+  delay(40);
+  Serial.println("stopping");
+}
+
+////////////Functions to Flash LED's//////////
+void flashOn(){
+  digitalWrite(7, HIGH);
+  digitalWrite(8, HIGH);
+  digitalWrite(9, HIGH);
+  digitalWrite(11, HIGH);
+}
+  
+void flashOff(){
+  digitalWrite(7, LOW);
+  digitalWrite(8, LOW);
+  digitalWrite(9, LOW);
+  digitalWrite(11, LOW);
+}
+
+void loop() {
+ PIROn=digitalRead(6);
+ Serial.println(PIROn);
+  if (PIROn==1) {
+    flashOn();
+    delay(blinkDelay);
+    flashOff();
+    delay(blinkDelay);
+    flashOn();
+    delay(blinkDelay);
+    flashOff();
+    delay(blinkDelay);
+    flashOn();
+    delay(blinkDelay);
+    flashOff();
+    delay(blinkDelay);
+    root.rewind();
+    play(root); //Play Sound
+    SpinLeft();
+    SpinLeft();
+    SpinLeft();
+    Stop();
+    root.rewind();
+    play(root); //Play Sound
+    SpinRight();
+    SpinRight();
+    SpinRight();
+    Stop();
+    delay(2000);
+  }
+ 
+  // uint8_t i;  Dunno what this is; commenting out to see what happens.
+  
+}
+
+/////////////////////////////////// HELPER Functions for Sound
+/*
+ * print error message and halt
+ */
+void error_P(const char *str) {
+  PgmPrint("Error: ");
+  SerialPrint_P(str);
+  sdErrorCheck();
+  while(1);
+}
+/*
+ * print error message and halt if SD I/O error, great for debugging!
+ */
+void sdErrorCheck(void) {
+  if (!card.errorCode()) return;
+  PgmPrint("\r\nSD I/O error: ");
+  Serial.print(card.errorCode(), HEX);
+  PgmPrint(", ");
+  Serial.println(card.errorData(), HEX);
+  while(1);
+}
+/*
+ * play recursively - possible stack overflow if subdirectories too nested
+ */
+void play(FatReader &dir) {
+  FatReader file;
+  while (dir.readDir(dirBuf) > 0) {    // Read every file in the directory one at a time
+  
+    // Skip it if not a subdirectory and not a .WAV file
+    if (!DIR_IS_SUBDIR(dirBuf)
+         && strncmp_P((char *)&dirBuf.name[8], PSTR("WAV"), 3)) {
+      continue;
+    }
+
+    Serial.println();            // clear out a new line
+    
+    for (uint8_t i = 0; i < dirLevel; i++) {
+       Serial.write(' ');       // this is for prettyprinting, put spaces in front
+    }
+    if (!file.open(vol, dirBuf)) {        // open the file in the directory
+      error("file.open failed");          // something went wrong
+    }
+    
+    if (file.isDir()) {                   // check if we opened a new directory
+      putstring("Subdir: ");
+      printEntryName(dirBuf);
+      Serial.println();
+      dirLevel += 2;                      // add more spaces
+      // play files in subdirectory
+      play(file);                         // recursive!
+      dirLevel -= 2;    
+    }
+    else {
+      // Aha! we found a file that isnt a directory
+      putstring("Playing ");
+      printEntryName(dirBuf);              // print it out
+      if (!wave.create(file)) {            // Figure out, is it a WAV proper?
+        putstring(" Not a valid WAV");     // ok skip it
+      } else {
+        Serial.println();                  // Hooray it IS a WAV proper!
+        wave.play();                       // make some noise!
+        
+        uint8_t n = 0;
+        while (wave.isplaying) {// playing occurs in interrupts, so we print dots in realtime
+          putstring(".");
+          if (!(++n % 32))Serial.println();
+          delay(100);
+        }       
+        sdErrorCheck();                    // everything OK?
+        // if (wave.errors)Serial.println(wave.errors);     // wave decoding errors
+      }
+    }
+  }
+}
