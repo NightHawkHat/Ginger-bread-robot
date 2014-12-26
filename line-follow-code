@@ -1,0 +1,140 @@
+/* 
+This is a sketch for the Adafruit assembled Motor Shield for Arduino v2
+It won't work with v1.x motor shields! Only for the v2's with built in PWM
+control
+
+This is the sketch that tells Lily's and Dad's robot to follow the line.
+
+For use with the Adafruit Motor Shield v2 
+---->	http://www.adafruit.com/products/1438
+*/
+
+//First,load the libraries you will need.
+#include <Wire.h> //Required by the motor shield. Runs the I2C communications. (What are these? DNTK!)
+#include <Adafruit_MotorShield.h> //Required by the motor shield. 
+#include "utility/Adafruit_PWMServoDriver.h" //Required by the motor shield. 
+#include <Servo.h> //Required to control the servo. 
+
+// Create the motor shield object with the default I2C address
+Adafruit_MotorShield AFMS = Adafruit_MotorShield(); 
+// Or, create it with a different I2C address (say for stacking)
+// Adafruit_MotorShield AFMS = Adafruit_MotorShield(0x61); 
+
+// Select which 'port' M1, M2, M3 or M4. In this case, M1
+Adafruit_DCMotor *myLeftMotor = AFMS.getMotor(1);
+// You can also make another motor on port M2
+Adafruit_DCMotor *myRightMotor = AFMS.getMotor(2);
+
+//Create some handy sensor and motor variables.
+  int RightSensor = 0;
+  int MiddleSensor = 0;
+  int LeftSensor = 0;
+  int SensorTotal = 0;
+  int OnBlackLine = 0;
+  int OffBlackLine = 1;
+  int DriveSpeed = 79;  
+  
+  //create servo object to wiggle laser
+ Servo MyServo;
+  //create handy variables to control the servo position
+  int ServoPos = 0;
+  int ServoTrigger = 0;
+
+void setup() {             //void setup is the function that always runs when the ardinio is turned on.
+  Serial.begin(9600);           // set up Serial library at 9600 bps
+  AFMS.begin();  // create with the default frequency 1.6KHz
+  //AFMS.begin(1000);  // OR with a different frequency, say 1KHz
+  
+  // Attach the servo on pin 10 to the servo object
+  
+  MyServo.attach(10);
+  
+  // Set the speed to start, from 0 (off) to 255 (max speed)
+  myLeftMotor->setSpeed(DriveSpeed);
+  // turn on motor
+  myLeftMotor->run(RELEASE);
+  
+  myRightMotor->setSpeed(DriveSpeed);
+  // turn on motor
+  myRightMotor->run(RELEASE);
+  
+
+}
+
+//Below we create some handy functions that will control the robot.
+
+void GoStraight() {
+  //drive forward
+     myLeftMotor->run(BACKWARD);
+     myRightMotor->run(FORWARD);
+     delay(50);
+     
+     return;
+}
+
+void HaltRobot() {
+  //stop 
+      myLeftMotor->run(RELEASE);
+      myRightMotor->run(RELEASE);
+      return;
+}
+
+void BackUp() {
+  //reverse
+     myLeftMotor->run(FORWARD);
+     myRightMotor->run(BACKWARD);
+     delay(50);
+     return;
+}
+
+void TurnLeft() {
+  //turn left. 
+     myLeftMotor->run(BACKWARD);
+     myRightMotor->run(RELEASE);
+     delay(50);
+     return;
+}
+
+void TurnRight(){
+  //turn right.
+      myLeftMotor->run(RELEASE);
+      myRightMotor->run(FORWARD);
+      delay(50);
+      return;
+}
+
+void MoveLaser() {
+    ServoPos = random(0,20);
+    MyServo.write(ServoPos);
+    return;
+}
+
+void loop() {
+    
+    RightSensor = digitalRead(2);  //Read the right sensor.
+    MiddleSensor = digitalRead(3);  //Read the middle sensor.
+    LeftSensor = digitalRead(4);  //Read the left sensor.
+    ServoTrigger = random(1,100);   //Generate a random number in case we want to use it to wiggle the laser.
+    
+    if (ServoTrigger == 50) {//We only move the laser 1 out of 100 times, that is, if a random integer b/t 1 and 100 equals 50.
+      MoveLaser();
+    }ƒƒ
+      
+    if (MiddleSensor == OnBlackLine &&  RightSensor == OffBlackLine && LeftSensor == OffBlackLine) {  //Robot is on course.
+      //drive
+      GoStraight();
+    }
+    else if (MiddleSensor == OffBlackLine &&  RightSensor == OffBlackLine && LeftSensor == OnBlackLine) { //To the right of black line.
+      TurnLeft();
+    }
+    else if (MiddleSensor == OffBlackLine &&  RightSensor == OnBlackLine && LeftSensor == OffBlackLine) { //To the left of black line.
+      TurnRight();
+    }
+    else { //Robot can't see line. Better stop.
+      //BackUp();
+      HaltRobot();
+    }
+
+   }
+  
+  
